@@ -102,11 +102,6 @@ class InsertTagReplacer
 	protected $tokens;
 
 	/**
-	 * @var \Twig_Environment|null
-	 */
-	protected $environment;
-
-	/**
 	 * @var string
 	 */
 	protected $unknownTagMode = self::MODE_EXCEPTION;
@@ -159,7 +154,6 @@ class InsertTagReplacer
 	 */
 	public function registerBlock($name, $callback)
 	{
-		$this->invalidateEnvironment();
 		$this->blocks[$name] = $callback;
 	}
 
@@ -172,7 +166,6 @@ class InsertTagReplacer
 	 */
 	public function unregisterBlock($name)
 	{
-		$this->invalidateEnvironment();
 		unset($this->blocks[$name]);
 	}
 
@@ -196,7 +189,6 @@ class InsertTagReplacer
 	 */
 	public function registerTag($name, $callback)
 	{
-		$this->invalidateEnvironment();
 		$this->tags[$name] = $callback;
 	}
 
@@ -209,7 +201,6 @@ class InsertTagReplacer
 	 */
 	public function unregisterTag($name)
 	{
-		$this->invalidateEnvironment();
 		unset($this->tags[$name]);
 	}
 
@@ -232,7 +223,6 @@ class InsertTagReplacer
 	 */
 	public function registerCallback($callback)
 	{
-		$this->invalidateEnvironment();
 		$this->callbacks[] = $callback;
 	}
 
@@ -245,7 +235,6 @@ class InsertTagReplacer
 	 */
 	public function unregisterCallback($callback)
 	{
-		$this->invalidateEnvironment();
 		foreach ($this->callbacks as $index => $registeredCallback) {
 			if ($registeredCallback == $callback) {
 				unset($this->callbacks[$index]);
@@ -273,7 +262,6 @@ class InsertTagReplacer
 	 */
 	public function registerFilter($name, $callback)
 	{
-		$this->invalidateEnvironment();
 		$this->filters[$name] = $callback;
 	}
 
@@ -286,7 +274,6 @@ class InsertTagReplacer
 	 */
 	public function unregisterFilter($name)
 	{
-		$this->invalidateEnvironment();
 		unset($this->filters[$name]);
 	}
 
@@ -310,7 +297,6 @@ class InsertTagReplacer
 	 */
 	public function setToken($name, $value)
 	{
-		$this->invalidateEnvironment();
 		$this->tokens[$name] = $value;
 	}
 
@@ -323,7 +309,6 @@ class InsertTagReplacer
 	 */
 	public function unsetToken($name)
 	{
-		$this->invalidateEnvironment();
 		unset($this->tokens[$name]);
 	}
 
@@ -437,28 +422,6 @@ class InsertTagReplacer
 	public function getUnknownTokenMode()
 	{
 		return $this->unknownTokenMode;
-	}
-
-	/**
-	 * Invalidate current environment.
-	 */
-	protected function invalidateEnvironment()
-	{
-		$this->environment = null;
-	}
-
-	/**
-	 * @return \Twig_Environment
-	 */
-	protected function getEnvironment()
-	{
-		if ($this->environment === null) {
-			$this->environment = new \Twig_Environment();
-			$this->environment->removeExtension('core');
-			$this->environment->removeExtension('escaper');
-			$this->environment->removeExtension('optimizer');
-		}
-		return $this->environment;
 	}
 
 	protected function applyFilters($string, $filters)
@@ -631,7 +594,7 @@ class InsertTagReplacer
 	 */
 	public function replace($string, $callback = null)
 	{
-		$environment = $this->getEnvironment();
+		$environment = new \Twig_Environment();
 		$lexer       = new \Twig_Lexer(
 			$environment,
 			array(
