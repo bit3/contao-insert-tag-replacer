@@ -10,32 +10,32 @@ class InsertTagReplacer
 	/**
 	 * Throw an exception on unknown tokens.
 	 */
-	const MODE_EXCEPTION = 'EXCEPTION';
+	const MODE_EXCEPTION = 1;
 
 	/**
 	 * Trigger an error on unknown tokens.
 	 */
-	const MODE_ERROR = 'ERROR';
+	const MODE_ERROR = 2;
 
 	/**
 	 * Trigger a warning on unknown tokens.
 	 */
-	const MODE_WARNING = 'WARNING';
+	const MODE_WARNING = 4;
 
 	/**
 	 * Trigger a notice on unknown tokens.
 	 */
-	const MODE_NOTICE = 'NOTICE';
+	const MODE_NOTICE = 8;
 
 	/**
 	 * Replace unknown tokens with an empty string.
 	 */
-	const MODE_EMPTY = 'EMPTY';
+	const MODE_EMPTY = 16;
 
 	/**
 	 * Leave the token as it it, it can be parsed later.
 	 */
-	const MODE_SKIP = 'SKIP';
+	const MODE_SKIP = 32;
 
 	/**
 	 * @var array
@@ -105,11 +105,6 @@ class InsertTagReplacer
 	 * @var \Twig_Environment|null
 	 */
 	protected $environment;
-
-	/**
-	 * @var string
-	 */
-	protected $unknownBlockMode = self::MODE_EXCEPTION;
 
 	/**
 	 * @var string
@@ -382,6 +377,17 @@ class InsertTagReplacer
 		return $this->tokens;
 	}
 
+	protected function extendMode($mode)
+	{
+		if (
+			($mode & self::MODE_ERROR || $mode & self::MODE_WARNING || $mode & self::MODE_NOTICE) &&
+			!($mode & self::MODE_EMPTY || $mode & self::MODE_SKIP)
+		) {
+			$mode |= self::MODE_EMPTY;
+		}
+		return $mode;
+	}
+
 	/**
 	 * Set handling mode for unknown blocks.
 	 *
@@ -389,29 +395,8 @@ class InsertTagReplacer
 	 */
 	public function setUnknownDefaultMode($mode)
 	{
-		$this->setUnknownBlockMode($mode);
 		$this->setUnknownTagMode($mode);
 		$this->setUnknownTokenMode($mode);
-	}
-
-	/**
-	 * Set handling mode for unknown blocks.
-	 *
-	 * @param string $mode On of the MODE_* constants.
-	 */
-	public function setUnknownBlockMode($mode)
-	{
-		$this->unknownBlockMode = $mode;
-	}
-
-	/**
-	 * Get handling mode for unknown blocks.
-	 *
-	 * @return string On of the MODE_* constants.
-	 */
-	public function getUnknownBlockMode()
-	{
-		return $this->unknownBlockMode;
 	}
 
 	/**
@@ -421,7 +406,7 @@ class InsertTagReplacer
 	 */
 	public function setUnknownTagMode($mode)
 	{
-		$this->unknownTagMode = $mode;
+		$this->unknownTagMode = $this->extendMode((int) $mode);
 	}
 
 	/**
@@ -441,7 +426,7 @@ class InsertTagReplacer
 	 */
 	public function setUnknownTokenMode($mode)
 	{
-		$this->unknownTokenMode = $mode;
+		$this->unknownTokenMode = $this->extendMode((int) $mode);
 	}
 
 	/**
@@ -543,30 +528,29 @@ class InsertTagReplacer
 						$buffer .= $this->applyFilters($this->tokens[$name], $filters);
 					}
 					else {
-						switch ($this->unknownTagMode) {
-							case self::MODE_ERROR:
-								trigger_error('Unknown token ##' . $fullName . '##', E_USER_ERROR);
-								break;
+						if ($this->unknownTagMode & self::MODE_ERROR) {
+							trigger_error('Unknown token ##' . $fullName . '##', E_USER_ERROR);
+						}
 
-							case self::MODE_WARNING:
+						if ($this->unknownTagMode & self::MODE_WARNING) {
 								trigger_error('Unknown token ##' . $fullName . '##', E_USER_WARNING);
-								break;
+						}
 
-							case self::MODE_NOTICE:
+						if ($this->unknownTagMode & self::MODE_NOTICE) {
 								trigger_error('Unknown token ##' . $fullName . '##', E_USER_NOTICE);
-								break;
+						}
 
-							case self::MODE_EMPTY:
+						if ($this->unknownTagMode & self::MODE_EMPTY) {
 								// do nothing
 								break;
+						}
 
-							case self::MODE_SKIP:
+						if ($this->unknownTagMode & self::MODE_SKIP) {
 								$buffer .= '##' . $fullName . '##';
 								break;
-
-							default:
-								throw new \Twig_Error_Syntax('Unknown token ##' . $fullName . '##');
 						}
+
+						throw new \Twig_Error_Syntax('Unknown token ##' . $fullName . '##');
 					}
 					break;
 
@@ -603,35 +587,34 @@ class InsertTagReplacer
 						$buffer .= $this->applyFilters(call_user_func($this->tags[$name], $name, $args), $filters);
 					}
 					else {
-						switch ($this->unknownTagMode) {
-							case self::MODE_ERROR:
-								trigger_error('Unknown token {{' . $fullName . '}}', E_USER_ERROR);
-								break;
+						if ($this->unknownTagMode & self::MODE_ERROR) {
+							trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_ERROR);
+						}
 
-							case self::MODE_WARNING:
-								trigger_error('Unknown token {{' . $fullName . '}}', E_USER_WARNING);
-								break;
+						if ($this->unknownTagMode & self::MODE_WARNING) {
+								trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_WARNING);
+						}
 
-							case self::MODE_NOTICE:
-								trigger_error('Unknown token {{' . $fullName . '}}', E_USER_NOTICE);
-								break;
+						if ($this->unknownTagMode & self::MODE_NOTICE) {
+								trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_NOTICE);
+						}
 
-							case self::MODE_EMPTY:
+						if ($this->unknownTagMode & self::MODE_EMPTY) {
 								// do nothing
 								break;
+						}
 
-							case self::MODE_SKIP:
+						if ($this->unknownTagMode & self::MODE_SKIP) {
 								$buffer .= '{{' . $fullName . '}}';
 								break;
-
-							default:
-								throw new \Twig_Error_Syntax('Unknown token {{' . $fullName . '}}');
 						}
+
+						throw new \Twig_Error_Syntax('Unknown tag {{' . $fullName . '}}');
 					}
 					break;
 
 				default:
-					throw new \Twig_Error_Syntax('Unknown token type ' . \Twig_Token::typeToEnglish($token->getType()));
+					throw new \Twig_Error_Syntax('Unknown element type ' . \Twig_Token::typeToEnglish($token->getType()));
 			}
 		}
 

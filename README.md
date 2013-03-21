@@ -69,7 +69,7 @@ To use in the content, embrace the name with `##`.
 #### Example
 
 ```
-###mytoken###
+##mytoken##
 ```
 
 #### Usage
@@ -104,4 +104,37 @@ Filters manipulate the value of a tag, block or token.
 $replacer->registerFilter('myfilter', function($value) {
 	// $value => the result of {{itag}}, {{block}}...{{endblock}} or ##token##
 });
+```
+
+Handling unknown tokens
+-----------------------
+
+By default, the Replacer will throw exceptions, but this behavior can be changed, there are three modes.
+The handling can be defined for tags and tokens or separately.
+
+```php
+// trigger an error and leave empty
+$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_ERROR);
+
+// trigger a warning and leave empty
+$replacer->setUnknownTagMode(InsertTagReplacer::MODE_WARNING);
+
+// trigger a notice and leave empty
+$replacer->setUnknownTokenMode(InsertTagReplacer::MODE_NOTICE);
+```
+
+With `InsertTagReplacer::MODE_EMPTY` an unknown tag/token will replaced with an empty value.
+With `InsertTagReplacer::MODE_SKIP` an unknown tag/token will not replaced.
+Both can be used with or without `InsertTagReplacer::MODE_ERROR`, `InsertTagReplacer::MODE_WARNING` or `InsertTagReplacer::MODE_NOTICE`.
+
+```php
+// trigger an error, but leave the tag as it is
+$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_ERROR | InsertTagReplacer::MODE_SKIP);
+
+// leave the tag as it is, but do not trigger an error
+$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_SKIP);
+
+// leave empty and do not trigger an error
+$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_EMPTY);
+
 ```
