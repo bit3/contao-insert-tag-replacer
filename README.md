@@ -138,3 +138,13 @@ $replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_SKIP);
 $replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_EMPTY);
 
 ```
+
+Caching
+-------
+
+Insert Tags can be cached. Just use one of the doctrine cache implementations.
+The cache only affects insert tags, no blocks or tokens.
+
+```php
+$replacer->setCache(new \Doctrine\Common\Cache\ArrayCache());
+```

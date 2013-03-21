@@ -547,7 +547,16 @@ class InsertTagReplacer
 						$buffer .= $this->applyFilters(call_user_func($this->blocks[$name], $name, $args, $body), $filters);
 					}
 					else if (isset($this->tags[$name])) {
-						$buffer .= $this->applyFilters(call_user_func($this->tags[$name], $name, $args), $filters);
+						if ($this->cache->contains($fullName)) {
+							$value = $this->cache->fetch($fullName);
+						}
+						else {
+							$value = call_user_func($this->tags[$name], $name, $args);
+							$value = $this->applyFilters($value, $filters);
+							$this->cache->save($fullName, $value);
+						}
+
+						$buffer .= $value;
 					}
 					else {
 						if ($this->unknownTagMode & self::MODE_ERROR) {
