@@ -1,4 +1,4 @@
-contao-insert-tag-replacer
-==========================
+PHP Tag Parser
+==============
 
-Module to replace insert tags in a comfortable way.
+Replace blocks, tags and filters.
