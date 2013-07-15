@@ -27,5 +27,10 @@
 		"psr-0": {
 			"Bit3\\TagReplacer": "src/"
 		}
+	},
+	"extra": {
+		"branch-alias": {
+			"dev-master": "1.x-dev"
+		}
 	}
 }
