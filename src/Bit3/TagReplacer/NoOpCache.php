@@ -1,6 +1,6 @@
 <?php
 
-namespace Bit3\InsertTagReplacer;
+namespace Bit3\TagReplacer;
 
 use Doctrine\Common\Cache\Cache;
 

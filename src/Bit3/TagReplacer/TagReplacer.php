@@ -1,11 +1,10 @@
 <?php
 
-namespace Bit3\InsertTagReplacer;
+namespace Bit3\TagReplacer;
 
-use Bit3\InsertTagReplacer\Twig\CallbackTokenParser;
 use Doctrine\Common\Cache\Cache;
 
-class InsertTagReplacer
+class TagReplacer
 {
 	/**
 	 * Throw an exception on unknown tokens.
@@ -443,8 +442,7 @@ class InsertTagReplacer
 		array $allowedTypes,
 		array $expectedTypes,
 		array $expectedNames
-	)
-	{
+	) {
 		$buffer = '';
 
 		while (!$stream->isEOF()) {
@@ -485,10 +483,48 @@ class InsertTagReplacer
 					);
 
 					$filters = explode('|', $fullName);
-					$name = array_shift($filters);
+					$path    = explode('.', array_shift($filters));
+					$value = $this->tokens;
 
-					if (isset($this->tokens[$name])) {
-						$buffer .= $this->applyFilters($this->tokens[$name], $filters);
+					while (count($path)) {
+						$name = array_shift($path);
+
+						if (is_array($value)) {
+							if (isset($value[$name])) {
+								$value = $value[$name];
+								continue;
+							}
+						}
+						else if (is_object($value)) {
+							$getterName = explode('_', $name);
+							$getterName = array_map('ucfirst', $getterName);
+							$getterName = implode('', $getterName);
+							$getterName = 'get' . $getterName;
+
+							$reflectionClass = new \ReflectionClass($value);
+
+							if ($reflectionClass->hasMethod($getterName)) {
+								$getter = $reflectionClass->getMethod($getterName);
+								if ($getter->isPublic()) {
+									$value = $getter->invoke($value);
+									continue;
+								}
+							}
+
+							if ($reflectionClass->hasProperty($name)) {
+								$property = $reflectionClass->getProperty($name);
+								if ($property->isPublic()) {
+									$value = $property->getValue($value);
+									continue;
+								}
+							}
+						}
+
+						$value = null;
+					}
+
+					if (!empty($value)) {
+						$buffer .= $this->applyFilters($value, $filters);
 					}
 					else {
 						if ($this->unknownTagMode & self::MODE_ERROR) {
@@ -496,21 +532,21 @@ class InsertTagReplacer
 						}
 
 						if ($this->unknownTagMode & self::MODE_WARNING) {
-								trigger_error('Unknown token ##' . $fullName . '##', E_USER_WARNING);
+							trigger_error('Unknown token ##' . $fullName . '##', E_USER_WARNING);
 						}
 
 						if ($this->unknownTagMode & self::MODE_NOTICE) {
-								trigger_error('Unknown token ##' . $fullName . '##', E_USER_NOTICE);
+							trigger_error('Unknown token ##' . $fullName . '##', E_USER_NOTICE);
 						}
 
 						if ($this->unknownTagMode & self::MODE_EMPTY) {
-								// do nothing
-								break;
+							// do nothing
+							break;
 						}
 
 						if ($this->unknownTagMode & self::MODE_SKIP) {
-								$buffer .= '##' . $fullName . '##';
-								break;
+							$buffer .= '##' . $fullName . '##';
+							break;
 						}
 
 						throw new \Twig_Error_Syntax('Unknown token ##' . $fullName . '##');
@@ -528,8 +564,13 @@ class InsertTagReplacer
 
 					$fullName = $this->replace($fullName);
 
-					$filters = explode('|', $fullName);
-					$args = explode('::', array_shift($filters));
+					$filters     = explode('|', $fullName);
+					$partialTag  = array_shift($filters);
+					$tagParts    = explode('?', $partialTag, 2);
+					$queryString = count($tagParts) > 1 ? $tagParts[1] : '';
+					$parameters  = array();
+					parse_str($queryString, $parameters);
+					$args = explode('::', $tagParts[0]);
 					$name = array_shift($args);
 
 					if (in_array($name, $expectedNames)) {
@@ -544,14 +585,17 @@ class InsertTagReplacer
 							array('end' . $name)
 						);
 
-						$buffer .= $this->applyFilters(call_user_func($this->blocks[$name], $name, $args, $body), $filters);
+						$buffer .= $this->applyFilters(
+							call_user_func($this->blocks[$name], $name, $args, $parameters, $body),
+							$filters
+						);
 					}
 					else if (isset($this->tags[$name])) {
 						if ($this->cache->contains($fullName)) {
 							$value = $this->cache->fetch($fullName);
 						}
 						else {
-							$value = call_user_func($this->tags[$name], $name, $args);
+							$value = call_user_func($this->tags[$name], $name, $args, $parameters);
 							$value = $this->applyFilters($value, $filters);
 							$this->cache->save($fullName, $value);
 						}
@@ -564,21 +608,21 @@ class InsertTagReplacer
 						}
 
 						if ($this->unknownTagMode & self::MODE_WARNING) {
-								trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_WARNING);
+							trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_WARNING);
 						}
 
 						if ($this->unknownTagMode & self::MODE_NOTICE) {
-								trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_NOTICE);
+							trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_NOTICE);
 						}
 
 						if ($this->unknownTagMode & self::MODE_EMPTY) {
-								// do nothing
-								break;
+							// do nothing
+							break;
 						}
 
 						if ($this->unknownTagMode & self::MODE_SKIP) {
-								$buffer .= '{{' . $fullName . '}}';
-								break;
+							$buffer .= '{{' . $fullName . '}}';
+							break;
 						}
 
 						throw new \Twig_Error_Syntax('Unknown tag {{' . $fullName . '}}');
@@ -586,7 +630,9 @@ class InsertTagReplacer
 					break;
 
 				default:
-					throw new \Twig_Error_Syntax('Unknown element type ' . \Twig_Token::typeToEnglish($token->getType()));
+					throw new \Twig_Error_Syntax('Unknown element type ' . \Twig_Token::typeToEnglish(
+						$token->getType()
+					));
 			}
 		}
 
@@ -607,7 +653,7 @@ class InsertTagReplacer
 		$lexer       = new \Twig_Lexer(
 			$environment,
 			array(
-				'tag_block'=> array('##', '##')
+				 'tag_block' => array('##', '##')
 			)
 		);
 		$stream      = $lexer->tokenize($string);

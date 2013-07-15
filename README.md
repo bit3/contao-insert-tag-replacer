@@ -1,29 +1,29 @@
-Contao Insert Tag Replacer
-==========================
+Tag Replacer
+============
 
-This Replacer replaces insert tags, but much more.
-It is based on the [Twig Lexer](http://twig.sensiolabs.org/).
+This replacer replaces tags and add logic to strings.
 
 Features
 --------
 
-### Insert tags
+### Tags
 
-Insert tags are special tags embraced in `{{` and `}}`.
-They have a name and may have parameters, concatenated by `::`.
+Tags are special tags embraced in `{{` and `}}`.
+They have a name and may have arguments concatenated by `::` and parameters as query string.
 
 #### Example
 
 ```
-{{itag::param1::param2}}
+{{tag::argument1::argument2?param1=value1&param2=value2}}
 ```
 
 #### Usage
 
 ```php
-$replacer->registerTag('itag', function($name, $args) {
-	// $name => 'itag'
-	// $args => array('param1', 'param2');
+$replacer->registerTag('tag', function($name, $args, $params) {
+	// $name   => 'tag'
+	// $args   => array('argument1', 'argument2')
+	// $params => array('param1' => 'value1, 'param2' => 'value2');
 });
 ```
 
@@ -36,7 +36,7 @@ Blocks are special tags with a start and an end. They do something to the conten
 #### Example
 
 ```
-{{myblock::param1::param2}}
+{{myblock::argument1::argument2?param1=value1&param2=value2}}
 Hello World
 {{endmyblock}}
 ```
@@ -44,16 +44,17 @@ Hello World
 #### Usage
 
 ```php
-$replacer->registerBlock('myblock', function($name, $args, $body) {
-	// $name => 'myblock'
-	// $args => array('param1', 'param2');
-	// $body => "\nHello World\n"
+$replacer->registerBlock('myblock', function($name, $args, $params, $body) {
+	// $name   => 'myblock'
+	// $args   => array('argument1', 'argument2')
+	// $params => array('param1' => 'value1, 'param2' => 'value2');
+	// $body   => "\nHello World\n"
 });
 ```
 
-### Recursive insert tags
+### Recursive tags
 
-Recursive insert tags are tag inside of other tags or blocks.
+Recursive tags are tags inside of other tags or blocks.
 
 #### Example
 
@@ -61,9 +62,9 @@ Recursive insert tags are tag inside of other tags or blocks.
 {{tag1::{{tag2}}}}
 ```
 
-### Simple tokens
+### Tokens
 
-Simple tokens do not have own logic as tags have. They are simple key=>value pairs.
+Tokens do not have own logic as tags have. They are simple key=>value pairs.
 To use in the content, embrace the name with `##`.
 
 #### Example
@@ -85,7 +86,7 @@ Filters manipulate the value of a tag, block or token.
 #### Examples
 
 ```
-{{itag|myfilter}}
+{{tag|myfilter}}
 ```
 
 ```
@@ -102,7 +103,7 @@ Filters manipulate the value of a tag, block or token.
 
 ```php
 $replacer->registerFilter('myfilter', function($value) {
-	// $value => the result of {{itag}}, {{block}}...{{endblock}} or ##token##
+	// $value => the result of {{tag}}, {{block}}...{{endblock}} or ##token##
 });
 ```
 
@@ -114,28 +115,28 @@ The handling can be defined for tags and tokens or separately.
 
 ```php
 // trigger an error and leave empty
-$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_ERROR);
+$replacer->setUnknownDefaultMode(TagReplacer::MODE_ERROR);
 
 // trigger a warning and leave empty
-$replacer->setUnknownTagMode(InsertTagReplacer::MODE_WARNING);
+$replacer->setUnknownTagMode(TagReplacer::MODE_WARNING);
 
 // trigger a notice and leave empty
-$replacer->setUnknownTokenMode(InsertTagReplacer::MODE_NOTICE);
+$replacer->setUnknownTokenMode(TagReplacer::MODE_NOTICE);
 ```
 
-With `InsertTagReplacer::MODE_EMPTY` an unknown tag/token will replaced with an empty value.
-With `InsertTagReplacer::MODE_SKIP` an unknown tag/token will not replaced.
-Both can be used with or without `InsertTagReplacer::MODE_ERROR`, `InsertTagReplacer::MODE_WARNING` or `InsertTagReplacer::MODE_NOTICE`.
+With `TagReplacer::MODE_EMPTY` an unknown tag/token will replaced with an empty value.
+With `TagReplacer::MODE_SKIP` an unknown tag/token will not replaced.
+Both can be used with or without `TagReplacer::MODE_ERROR`, `TagReplacer::MODE_WARNING` or `TagReplacer::MODE_NOTICE`.
 
 ```php
 // trigger an error, but leave the tag as it is
-$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_ERROR | InsertTagReplacer::MODE_SKIP);
+$replacer->setUnknownDefaultMode(TagReplacer::MODE_ERROR | TagReplacer::MODE_SKIP);
 
 // leave the tag as it is, but do not trigger an error
-$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_SKIP);
+$replacer->setUnknownDefaultMode(TagReplacer::MODE_SKIP);
 
 // leave empty and do not trigger an error
-$replacer->setUnknownDefaultMode(InsertTagReplacer::MODE_EMPTY);
+$replacer->setUnknownDefaultMode(TagReplacer::MODE_EMPTY);
 
 ```
 
