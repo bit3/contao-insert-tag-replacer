@@ -2,6 +2,7 @@
 
 namespace Bit3\TagReplacer;
 
+use Bit3\TagReplacer\Internals\TokenTag;
 use Doctrine\Common\Cache\Cache;
 
 class TagReplacer
@@ -37,6 +38,16 @@ class TagReplacer
 	const MODE_SKIP = 32;
 
 	/**
+	 * Enable internal logic
+	 */
+	const FLAG_ENABLE_ALL_INTERNALS = 1024;
+
+	/**
+	 * Enable internal token tag {{token::<name>}}
+	 */
+	const FLAG_ENABLE_TAG_TOKEN = 1024;
+
+	/**
 	 * @var array
 	 */
 	protected static $defaultBufferTypes = array(
@@ -69,6 +80,11 @@ class TagReplacer
 		\Twig_Token::INTERPOLATION_START_TYPE,
 		\Twig_Token::INTERPOLATION_END_TYPE,
 	);
+
+	/**
+	 * @var int
+	 */
+	protected $flags;
 
 	/**
 	 * @var Cache
@@ -110,8 +126,9 @@ class TagReplacer
 	 */
 	protected $unknownTokenMode = self::MODE_EXCEPTION;
 
-	function __construct()
+	function __construct($flags = 0)
 	{
+		$this->flags = $flags;
 		$this->cache       = new NoOpCache();
 		$this->blocks      = array();
 		$this->tags        = array();
@@ -119,6 +136,23 @@ class TagReplacer
 		$this->filters     = array();
 		$this->tokens      = array();
 		$this->environment = null;
+	}
+
+	/**
+	 * @param int $flags
+	 */
+	public function setFlags($flags)
+	{
+		$this->flags = (int) $flags;
+		return $this;
+	}
+
+	/**
+	 * @return int
+	 */
+	public function getFlags()
+	{
+		return $this->flags;
 	}
 
 	/**
@@ -436,12 +470,58 @@ class TagReplacer
 		return $string;
 	}
 
+	public function evaluateToken($name)
+	{
+		$path    = explode('.', $name);
+		$value = $this->tokens;
+
+		while (count($path)) {
+			$name = array_shift($path);
+
+			if (is_array($value)) {
+				if (isset($value[$name])) {
+					$value = $value[$name];
+					continue;
+				}
+			}
+			else if (is_object($value)) {
+				$getterName = explode('_', $name);
+				$getterName = array_map('ucfirst', $getterName);
+				$getterName = implode('', $getterName);
+				$getterName = 'get' . $getterName;
+
+				$reflectionClass = new \ReflectionClass($value);
+
+				if ($reflectionClass->hasMethod($getterName)) {
+					$getter = $reflectionClass->getMethod($getterName);
+					if ($getter->isPublic()) {
+						$value = $getter->invoke($value);
+						continue;
+					}
+				}
+
+				if ($reflectionClass->hasProperty($name)) {
+					$property = $reflectionClass->getProperty($name);
+					if ($property->isPublic()) {
+						$value = $property->getValue($value);
+						continue;
+					}
+				}
+			}
+
+			$value = null;
+		}
+
+		return $value;
+	}
+
 	protected function parseUntil(
 		\Twig_TokenStream $stream,
 		array $bufferTypes,
 		array $allowedTypes,
 		array $expectedTypes,
-		array $expectedNames
+		array $expectedNames,
+		$callback = false
 	) {
 		$buffer = '';
 
@@ -479,49 +559,13 @@ class TagReplacer
 						static::$allTypes,
 						static::$allTypes,
 						array(\Twig_Token::BLOCK_END_TYPE),
-						array()
+						array(),
+						$callback
 					);
 
 					$filters = explode('|', $fullName);
-					$path    = explode('.', array_shift($filters));
-					$value = $this->tokens;
-
-					while (count($path)) {
-						$name = array_shift($path);
-
-						if (is_array($value)) {
-							if (isset($value[$name])) {
-								$value = $value[$name];
-								continue;
-							}
-						}
-						else if (is_object($value)) {
-							$getterName = explode('_', $name);
-							$getterName = array_map('ucfirst', $getterName);
-							$getterName = implode('', $getterName);
-							$getterName = 'get' . $getterName;
-
-							$reflectionClass = new \ReflectionClass($value);
-
-							if ($reflectionClass->hasMethod($getterName)) {
-								$getter = $reflectionClass->getMethod($getterName);
-								if ($getter->isPublic()) {
-									$value = $getter->invoke($value);
-									continue;
-								}
-							}
-
-							if ($reflectionClass->hasProperty($name)) {
-								$property = $reflectionClass->getProperty($name);
-								if ($property->isPublic()) {
-									$value = $property->getValue($value);
-									continue;
-								}
-							}
-						}
-
-						$value = null;
-					}
+					$name    = array_shift($filters);
+					$value   = $this->evaluateToken($name);
 
 					if (!empty($value)) {
 						$buffer .= $this->applyFilters($value, $filters);
@@ -559,7 +603,8 @@ class TagReplacer
 						static::$allTypes,
 						static::$allTypes,
 						array(\Twig_Token::VAR_END_TYPE),
-						array()
+						array(),
+						$callback
 					);
 
 					$fullName = $this->replace($fullName);
@@ -582,7 +627,8 @@ class TagReplacer
 							static::$defaultBufferTypes,
 							static::$allTypes,
 							array(),
-							array('end' . $name)
+							array('end' . $name),
+							$callback
 						);
 
 						$buffer .= $this->applyFilters(
@@ -603,6 +649,12 @@ class TagReplacer
 						$buffer .= $value;
 					}
 					else {
+						$temp = is_callable($callback) ? call_user_func($callback, $fullName) : false;
+
+						if ($temp !== null && $temp !== false) {
+							break;
+						}
+
 						if ($this->unknownTagMode & self::MODE_ERROR) {
 							trigger_error('Unknown tag {{' . $fullName . '}}', E_USER_ERROR);
 						}
@@ -658,12 +710,17 @@ class TagReplacer
 		);
 		$stream      = $lexer->tokenize($string);
 
+		if ($this->flags & static::FLAG_ENABLE_TAG_TOKEN) {
+			$this->registerTag('token', array(new TokenTag($this), 'replace'));
+		}
+
 		return $this->parseUntil(
 			$stream,
 			static::$defaultBufferTypes,
 			static::$allTypes,
 			array(),
-			array()
+			array(),
+			$callback
 		);
 	}
 }
