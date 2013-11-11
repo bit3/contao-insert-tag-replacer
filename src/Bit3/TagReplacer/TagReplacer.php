@@ -4,6 +4,7 @@ namespace Bit3\TagReplacer;
 
 use Bit3\TagReplacer\Internals\TokenTag;
 use Doctrine\Common\Cache\Cache;
+use Symfony\Component\PropertyAccess\PropertyAccess;
 
 class TagReplacer
 {
@@ -40,7 +41,7 @@ class TagReplacer
 	/**
 	 * Enable internal logic
 	 */
-	const FLAG_ENABLE_ALL_INTERNALS = 1024;
+	const FLAG_ENABLE_ALL_INTERNALS = self::FLAG_ENABLE_TAG_TOKEN;
 
 	/**
 	 * Enable internal token tag {{token::<name>}}
@@ -126,6 +127,11 @@ class TagReplacer
 	 */
 	protected $unknownTokenMode = self::MODE_EXCEPTION;
 
+	/**
+	 * @var PropertyAccess
+	 */
+	protected $accessor;
+
 	function __construct($flags = 0)
 	{
 		$this->flags = $flags;
@@ -136,6 +142,7 @@ class TagReplacer
 		$this->filters     = array();
 		$this->tokens      = array();
 		$this->environment = null;
+		$this->accessor    = PropertyAccess::createPropertyAccessor();
 	}
 
 	/**
@@ -470,51 +477,6 @@ class TagReplacer
 		return $string;
 	}
 
-	public function evaluateToken($name)
-	{
-		$path    = explode('.', $name);
-		$value = $this->tokens;
-
-		while (count($path)) {
-			$name = array_shift($path);
-
-			if (is_array($value)) {
-				if (isset($value[$name])) {
-					$value = $value[$name];
-					continue;
-				}
-			}
-			else if (is_object($value)) {
-				$getterName = explode('_', $name);
-				$getterName = array_map('ucfirst', $getterName);
-				$getterName = implode('', $getterName);
-				$getterName = 'get' . $getterName;
-
-				$reflectionClass = new \ReflectionClass($value);
-
-				if ($reflectionClass->hasMethod($getterName)) {
-					$getter = $reflectionClass->getMethod($getterName);
-					if ($getter->isPublic()) {
-						$value = $getter->invoke($value);
-						continue;
-					}
-				}
-
-				if ($reflectionClass->hasProperty($name)) {
-					$property = $reflectionClass->getProperty($name);
-					if ($property->isPublic()) {
-						$value = $property->getValue($value);
-						continue;
-					}
-				}
-			}
-
-			$value = null;
-		}
-
-		return $value;
-	}
-
 	protected function parseUntil(
 		\Twig_TokenStream $stream,
 		array $bufferTypes,
@@ -565,7 +527,7 @@ class TagReplacer
 
 					$filters = explode('|', $fullName);
 					$name    = array_shift($filters);
-					$value   = $this->evaluateToken($name);
+					$value   = $this->accessor->getValue((object) $this->tokens, $name);
 
 					if (!empty($value)) {
 						$buffer .= $this->applyFilters($value, $filters);
@@ -607,7 +569,7 @@ class TagReplacer
 						$callback
 					);
 
-					$fullName = $this->replace($fullName);
+					$fullName = $this->replace($fullName, $callback);
 
 					$filters     = explode('|', $fullName);
 					$partialTag  = array_shift($filters);
