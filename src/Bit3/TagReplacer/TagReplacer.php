@@ -4,6 +4,7 @@ namespace Bit3\TagReplacer;
 
 use Bit3\TagReplacer\Internals\TokenTag;
 use Doctrine\Common\Cache\Cache;
+use Symfony\Component\PropertyAccess\Exception\NoSuchPropertyException;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 
 class TagReplacer
@@ -527,7 +528,12 @@ class TagReplacer
 
 					$filters = explode('|', $fullName);
 					$name    = array_shift($filters);
-					$value   = $this->accessor->getValue((object) $this->tokens, $name);
+					try {
+						$value = $this->accessor->getValue((object) $this->tokens, $name);
+					}
+					catch(NoSuchPropertyException $e) {
+						$value = null;
+					}
 
 					if (!empty($value)) {
 						$buffer .= $this->applyFilters($value, $filters);
